@@ -1,0 +1,313 @@
+alias: Is It A Special Day
+sequence:
+  - variables:
+      special_text: |-
+        {# Output is text string that fits with phrase 'today is...' #}
+        {# or the string 'unknown' #}
+
+        {# o: occurance, d: day of week (1 = Monday), m: month, y: year #}
+        {# Nth weekday in a month #}
+        {%- macro x_weekday_in_month(o,d,m,y) -%}
+        {%- set f = as_local(as_datetime('%04d-%02d-01T00:00:00'%(y,m))) -%}
+        {{- f + timedelta(days = (7 - f.isoweekday() + d if d < f.isoweekday()
+          else d - f.isoweekday()) + 7*(o-1)) -}}
+        {%- endmacro -%}
+
+        {# o: occurance, d: day of week (1 = Monday), m: month, y: year #}
+        {# Last Nth weekday in a month #}
+        {%- macro x_last_in_month(o,d,m,y) -%}
+        {%- set l = as_local(as_datetime('%04d-%02d-01T00:00:00'%(y,(m+1)))) -
+          timedelta(days=1) -%}
+        {{- l - timedelta(days = (l.isoweekday() - d if d <= l.isoweekday()
+          else 7 - d + l.isoweekday()) + 7*(o-1)) -}}
+        {%- endmacro -%}
+
+        {# o: occurance, d: day of week (1 = Monday), t: date, m: month, y: year #}
+        {# Nth weekday after a date #}
+        {%- macro x_weekday_after(o,d,t,m,y) -%}
+        {%- set f = as_local(as_datetime('%04d-%02d-%02dT00:00:00'%(y,m,t))) -%}
+        {{- f + timedelta(days = (7 - f.isoweekday() + d if d < f.isoweekday()
+          else d - f.isoweekday()) + 7*(o-1)) -}}
+        {%- endmacro -%}
+
+        {# o: occurance, d: day of week (1 = Monday), t: date, m: month, y: year #}
+        {# Nth weekday before a date #}
+        {%- macro x_weekday_before(o,d,t,m,y) -%}
+        {%- set l = as_local(as_datetime('%04d-%02d-%02dT00:00:00'%(y,m,t))) -%}
+        {{- l - timedelta(days = (l.isoweekday() - d if d <= l.isoweekday()
+          else 7 - d + l.isoweekday()) + 7*(o-1)) -}}
+        {%- endmacro -%}
+
+        {# o: occurance, d: day of week (1 = Monday), wdo: after day occurance, wd: after day of week, m: month, y: year #}
+        {# Nth weekday after Nth weekday #}
+        {%- macro x_weekday_after_weekday(o,d,wdo,wd,m,y) -%}
+        {%- set f = as_local(as_datetime(x_weekday_in_month(wdo,wd,m,y)))  -%}
+        {{- f + timedelta(days = (7 - f.isoweekday() + d if d < f.isoweekday()
+          else d - f.isoweekday()) + 7*(o-1)) -}}
+        {%- endmacro -%}
+
+        {%- macro ordinal_suffix_of(i) -%}
+        {%- set j = i % 10 -%}
+        {%- set k = i % 100 -%}
+        {%- if j == 1 and k != 11 -%}
+          {{ i|string + "st" }}
+        {%- elif j == 2 and k != 12 -%}
+          {{ i|string + "nd" }}
+        {%- elif j == 3 and k!= 13 -%}
+          {{ i|string + "rd" }}
+        {%- else -%}
+          {{ i|string + "th" }}
+        {%- endif -%}
+        {%- endmacro -%}
+
+        {%- macro day_of(d1, d2) -%}
+          {{ (d2-d1).days + 1 }}
+        {%- endmacro -%}
+
+        {%- macro to_append_or_not(s1, s2) -%}
+          {%- if s1 == "unknown" -%}
+            {{ s2 }}
+          {%- else -%}
+            {{ s1 + ' and ' + s2 }}
+          {%- endif -%}
+        {%- endmacro -%}
+
+        {# Mangle now() into midnight with timezone #}
+        {%- set cur_date = now() -%}
+        {%- set cur_year = cur_date.year -%}
+        {%- set cur_month = cur_date.month -%}
+        {%- set cur_day = cur_date.day -%}
+        {%- set cur_date =
+          as_local(as_datetime('%04d-%02d-%02dT00:00:00'%(cur_year,cur_month,cur_day)))
+        -%}
+
+        {# Set default output text #}
+        {%- set output_text = "unknown" -%}
+
+        {%- if cur_month == 1 -%}
+
+          {%- set new_years_day = as_local(as_datetime('%04d-01-01T00:00:00'%(cur_year))) -%}
+          {%- set mlkjr = as_local(as_datetime(x_weekday_in_month(3,1,1,cur_year))) -%}
+
+          {%- if cur_date == new_years_day -%}
+            {%- set output_text = "New Year's Day" -%}
+          {%- elif cur_date == mlkjr -%}
+            {%- set output_text = "Martin Luther King Jr. Day " -%}
+          {%- endif -%}
+
+          {%- if (cur_year-1) % 4 == 0 and ((cur_date == as_local(as_datetime('%04d-01-20T00:00:00'%(cur_year))) and cur_date.isoweekday() != 7) or (cur_date == as_local(as_datetime('%04d-01-21T00:00:00'%(cur_year))) and cur_date.isoweekday() == 1)) -%}
+            {%- set output_text = "Inauguration Day" -%}
+          {%- endif -%}
+
+        {# Start looking for interesting dates... Easter is somewhere in here #}
+        {%- elif cur_month > 1 and cur_month < 7 -%}
+
+          {#- Easter - based on a calculated date -#}
+          {%- set Y = cur_year -%}
+          {%- set G = Y % 19 + 1 -%}
+          {%- set C = (Y / 100) | int + 1 -%}
+          {%- set X = (3*C / 4) | int - 12 -%}
+          {%- set Z = ((8*C + 5) / 25) | int - 5 -%}
+          {%- set D = (5*Y / 4)| int - X - 10 -%}
+          {%- set E = (11*G + 20 + Z - X ) % 30 -%}
+          {%- set E = E+1 if (E == 25 and G > 11 or E == 24) else E -%}
+          {%- set N = 44 - E -%}
+          {%- set N = N+30 if N < 21 else N -%}
+          {%- set N = N + 7 - (( D + N ) % 7) -%}
+          {%- set M = 4 if N > 31 else 3 -%}
+          {%- set N = N-31 if N > 31 else N -%}
+          {%- set easter = as_local(as_datetime('%04d-%02d-%02dT00:00:00'%(Y,M,N))) -%}
+
+          {# Calculate all the interesting days in Easter - easier to see if done in one go #}
+          {%- set shrove_monday = as_local(easter - timedelta(days=48)) -%}
+          {%- set ash_wednesday = as_local(easter - timedelta(days=46)) -%}
+          {%- set palm_sunday = as_local(easter - timedelta(days=7)) -%}
+          {%- set good_friday = as_local(easter - timedelta(days=2)) -%}
+          {%- set sacred_heart = as_local(easter + timedelta(days=69)) -%}
+
+          {# Check dates relevant to Easter #}
+          {%- if cur_date >= shrove_monday and cur_date <= sacred_heart -%}
+
+            {%- if cur_date == ash_wednesday -%}
+              {%- set output_text = "Ash Wednesday" -%}
+            {%- elif cur_date == palm_sunday -%}
+              {%- set output_text = "Palm Sunday" -%}
+            {%- elif cur_date == good_friday -%}
+              {%- set output_text = "Good Friday" -%}
+            {%- elif cur_date == easter -%}
+              {%- set output_text = "Easter Day" -%}
+            {%- endif -%}
+          {%- endif -%}
+
+          {# Other months in the first half of the year #}
+          {%- if cur_month == 2 -%}
+
+            {%- set groundhog = as_local(as_datetime('%04d-02-02T00:00:00'%(cur_year))) -%}
+            {%- set valentines_day = as_local(as_datetime('%04d-02-14T00:00:00'%(cur_year))) -%}
+            {%- set presidents_day = as_local(as_datetime(x_weekday_in_month(3,1,2,cur_year))) -%}
+            {%- set super_bowl = as_local(as_datetime(x_weekday_in_month(2,7,2,cur_year))) -%}
+
+            {%- if cur_date == groundhog -%}
+              {%- set output_text = "Groundhog Day" -%}
+            {%- elif cur_date == valentines_day -%}
+              {%- set output_text = "Valentine's Day" -%}
+            {%- elif cur_date == presidents_day -%}
+              {%- set output_text = "President's Day" -%}
+            {%- elif cur_date == super_bowl -%}
+              {%- set output_text = "Super Bowl" -%}            
+            {%- endif -%}
+
+            {%- if cur_year % 4 == 0 and (cur_year % 100 != 0 or (cur_year % 100 == 0 and cur_year % 400 == 0)) and cur_date == as_local(as_datetime('%04d-02-29T00:00:00'%(cur_year))) -%}
+              {%- set output_text = "Leap Day" -%}
+            {%- endif -%}
+
+          {%- elif cur_month == 3 -%}
+
+            {%- set stpatricks_day = as_local(as_datetime('%04d-03-17T00:00:00'%(cur_year))) -%}
+
+            {%- if cur_date == stpatricks_day -%}
+              {%- set output_text = to_append_or_not(output_text, "St Patrick's Day") -%}
+            {%- endif -%}
+
+          {%- elif cur_month == 4 -%}
+
+            {%- set april_fools_day = as_local(as_datetime('%04d-04-01T00:00:00'%(cur_year))) -%}
+
+            {%- if cur_date == april_fools_day -%}
+              {%- set output_text = to_append_or_not(output_text, "April Fool's Day") -%}
+            {%- endif -%}
+
+          {%- elif cur_month == 5 -%}
+
+            {%- set mothers_day = as_local(as_datetime(x_weekday_in_month(2,7,5,cur_year))) -%}
+            {%- set memorial_day = as_local(as_datetime(x_last_in_month(1,1,5,cur_year))) -%}
+            {%- set cinco_de_mayo = as_local(as_datetime('%04d-05-05T00:00:00'%(cur_year))) -%}
+
+            {%- if cur_date == mothers_day -%}
+              {%- set output_text = to_append_or_not(output_text, "Mother's Day") -%}
+            {%- elif cur_date == cinco_de_mayo -%}
+              {%- set output_text = to_append_or_not(output_text, "Cinco de Mayo") -%}
+            {%- elif cur_date == memorial_day -%}
+              {%- set output_text = to_append_or_not(output_text, "Memorial Day") -%}
+            {%- endif -%}
+
+          {%- elif cur_month == 6 -%}
+
+            {%- set fathers_day = as_local(as_datetime(x_weekday_in_month(3,7,6,cur_year))) -%}
+            {%- set juneteenth = as_local(as_datetime('%04d-06-19T00:00:00'%(cur_year))) -%}
+            
+            {%- if cur_date == fathers_day -%}
+              {%- set output_text = to_append_or_not(output_text, "Fathers Day") -%}
+            {%- elif cur_date == juneteenth -%}
+              {%- set output_text = to_append_or_not(output_text, "Juneteenth National Independence Day") -%}
+            {%- endif -%}
+
+          {%- endif -%}
+
+        {# Specific months in the second half of the year #}
+
+        {%- elif cur_month == 7 -%}
+
+          {%- set independence_day = as_local(as_datetime('%04d-07-04T00:00:00'%(cur_year))) -%}
+
+          {%- if cur_date == independence_day -%}
+            {%- set output_text = "Independence Day" -%}
+          {%- endif -%}
+
+        {%- elif cur_month == 9 -%}
+
+          {%- set labor_day = as_local(as_datetime(x_weekday_in_month(1,1,9,cur_year))) -%}
+
+          {%- if cur_date == labor_day -%}
+            {%- set output_text = "Labor Day" -%}
+          {%- endif -%}
+
+        {%- elif cur_month == 10 -%}
+
+          {%- set columbus_day = as_local(as_datetime(x_weekday_in_month(2,1,10,cur_year))) -%}
+          {%- set halloween = as_local(as_datetime('%04d-10-31T00:00:00'%(cur_year))) -%}
+
+          {%- if cur_date == columbus_day -%}
+            {%- set output_text = "Columbus Day" -%}
+          {%- elif cur_date == halloween -%}
+            {%- set output_text = "Halloween" -%} 
+          {%- endif -%}
+
+        {%- elif cur_month >= 11 -%}
+
+          {%- set election_day = as_local(as_datetime(x_weekday_after_weekday(1,2,1,1,11,cur_year))) -%}
+          {%- set veterans_day = as_local(as_datetime('%04d-11-11T00:00:00'%(cur_year))) -%}
+          {%- set thanksgiving = as_local(as_datetime(x_weekday_in_month(4,4,11,cur_year))) -%}
+
+          {%- if cur_date == election_day -%}
+            {%- set output_text = "Election Day" -%}
+          {%- elif cur_date == veterans_day -%}
+            {%- set output_text = "Veteran's Day" -%}
+          {%- elif cur_date == thanksgiving -%}
+            {%- set output_text = "Thanksgiving" -%} 
+          {%- endif -%}
+
+          {# Advent can start 27 November #}
+
+          {#- Christmas based off a fixed date, but advent moves about -#}
+          {%- set christmas_day = as_local(as_datetime('%04d-12-25T00:00:00'%(cur_year))) -%}
+          {%- set christmas_eve = as_local(christmas_day - timedelta(days = 1)) -%}
+          {%- set new_year_eve = as_local(as_datetime('%04d-12-31T00:00:00'%(cur_year))) -%}
+
+          {%- if cur_date == christmas_day -%}
+            {%- set output_text = "Christmas Day" -%}
+          {%- elif cur_date == christmas_eve -%}
+            {%- set output_text = "Christmas Eve" -%}
+          {%- elif cur_date == new_year_eve -%}
+            {%- set output_text = "New Year's Eve" -%}
+          {%- endif -%}
+
+        {%- else -%}
+
+          {# Not a special day... #}
+          {%- set output_text = "unknown" -%}
+
+        {%- endif -%}
+
+        {# Do some funky Lunar stuff #}
+        {%- set lunar_text = "" -%}
+        {%- if (states('sensor.moon') == "new_moon") -%}
+          {%- if (cur_month == 1 and cur_day > 20) or
+              (cur_month == 2 and cur_day < 20) -%}
+            {%- set lunar_text = "Lunar and Chinese New Year's Eve" -%}
+          {%- else -%}
+            {%- set lunar_text = "a new moon" -%}
+          {%- endif -%}
+        {%- elif (states('sensor.moon') == "full_moon") -%}
+            {%- set lunar_text = "a full moon" -%}
+        {%- endif -%}
+        {%- if lunar_text != "" -%}
+          {%- set output_text = to_append_or_not(output_text, lunar_text) -%}
+        {%- endif -%}
+
+        {{ output_text }}
+  - if:
+      - condition: template
+        value_template: "{{ special_text != \"unknown\" }}"
+    then:
+      - service: input_text.set_value
+        data:
+          value: "{{ special_text }}"
+        target:
+          entity_id: input_text.special_day_text
+      - service: input_boolean.turn_on
+        data: {}
+        target:
+          entity_id: input_boolean.special_day
+    else:
+      - service: input_text.set_value
+        data:
+          value: unknown
+        target:
+          entity_id: input_text.special_day_text
+      - service: input_boolean.turn_off
+        data: {}
+        target:
+          entity_id: input_boolean.special_day
+mode: queued
+max: 10
